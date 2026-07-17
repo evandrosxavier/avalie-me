@@ -73,12 +73,12 @@
                     <!-- <disableAppInsights></disableAppInsights> -->
                     <runtime>
                         <!-- runtime os, could be windows, linux or docker-->
-                        <os>windows</os>
+                        <os>linux</os>
                         <javaVersion>21</javaVersion>
                     </runtime>
                     <appSettings>
                         <property>
-                            <name>FUNCTIONS_EXTENSION_VERSION</name>
+                            <name>FUNCTIONS_EXTENSION_VERSION</name>cl
                             <value>~4</value>
                         </property>
                     </appSettings>
