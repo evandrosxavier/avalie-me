@@ -2,6 +2,7 @@ package br.com.fiap.avalieme.repository;
 
 import br.com.fiap.avalieme.domain.Avaliacao;
 import br.com.fiap.avalieme.domain.Urgencia;
+import br.com.fiap.avalieme.util.ConversorData;
 import com.azure.cosmos.CosmosClient;
 import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.CosmosContainer;
@@ -10,7 +11,6 @@ import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.util.CosmosPagedIterable;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -63,21 +63,13 @@ public class CosmosAvaliacaoRepository implements AvaliacaoRepository {
         return avaliacoes;
     }
 
-    private String instantParaIso(Instant instant) {
-        return instant.toString();
-    }
-
-    private Instant isoParaInstant(String iso) {
-        return Instant.parse(iso);
-    }
-
     private AvaliacaoDocumento toDocumento(Avaliacao avaliacao) {
         return new AvaliacaoDocumento(
                 avaliacao.id(),
                 avaliacao.descricao(),
                 avaliacao.nota(),
                 avaliacao.urgencia().name(),
-                instantParaIso(avaliacao.dataRegistro())
+                ConversorData.paraIso(avaliacao.dataRegistro())
         );
     }
 
@@ -87,7 +79,7 @@ public class CosmosAvaliacaoRepository implements AvaliacaoRepository {
                 documento.descricao,
                 documento.nota,
                 Urgencia.valueOf(documento.urgencia),
-                isoParaInstant(documento.dataRegistro)
+                ConversorData.paraInstant(documento.dataRegistro)
         );
     }
 
