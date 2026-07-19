@@ -2,7 +2,7 @@ package br.com.fiap.avalieme.functions;
 
 import br.com.fiap.avalieme.domain.Avaliacao;
 import br.com.fiap.avalieme.dto.AvaliacaoRequest;
-import br.com.fiap.avalieme.repository.InMemoryAvaliacaoRepository;
+import br.com.fiap.avalieme.repository.CosmosAvaliacaoRepository;
 import br.com.fiap.avalieme.service.AvaliacaoService;
 import com.microsoft.azure.functions.*;
 import com.microsoft.azure.functions.annotation.*;
@@ -12,7 +12,7 @@ import java.util.Optional;
 public class IngestFunction {
 
     private static final AvaliacaoService SERVICE =
-            new AvaliacaoService(new InMemoryAvaliacaoRepository());
+            new AvaliacaoService(new CosmosAvaliacaoRepository());
 
     @FunctionName("ingest")
     public HttpResponseMessage run(
