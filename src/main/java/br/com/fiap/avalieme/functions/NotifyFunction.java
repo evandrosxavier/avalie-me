@@ -1,6 +1,11 @@
 package br.com.fiap.avalieme.functions;
 
+import br.com.fiap.avalieme.domain.Notificacao;
+import br.com.fiap.avalieme.domain.StatusNotificacao;
 import br.com.fiap.avalieme.dto.AvaliacaoUrgenteMensagem;
+import br.com.fiap.avalieme.repository.CosmosNotificacaoRepository;
+import br.com.fiap.avalieme.repository.NotificacaoRepository;
+import br.com.fiap.avalieme.util.ConversorData;
 import com.azure.communication.email.EmailClient;
 import com.azure.communication.email.EmailClientBuilder;
 import com.azure.communication.email.models.EmailMessage;
@@ -10,11 +15,15 @@ import com.microsoft.azure.functions.ExecutionContext;
 import com.microsoft.azure.functions.annotation.FunctionName;
 import com.microsoft.azure.functions.annotation.QueueTrigger;
 
+import java.time.Instant;
+
 public class NotifyFunction {
 
     private static final Gson GSON = new Gson();
     private static final String REMETENTE =
             "DoNotReply@b3991415-9ff8-4633-9d9f-ca0a4fb29dcd.azurecomm.net";
+
+    private final NotificacaoRepository notificacaoRepository = new CosmosNotificacaoRepository();
 
     @FunctionName("notify")
     public void run(
@@ -56,9 +65,29 @@ public class NotifyFunction {
 
             context.getLogger().info("E-mail enviado para avaliacao " + avaliacao.id()
                     + " com status " + resultado.getStatus());
+
+            notificacaoRepository.salvar(new Notificacao(
+                    avaliacao.id(),
+                    avaliacao.descricao(),
+                    avaliacao.nota(),
+                    avaliacao.urgencia(),
+                    ConversorData.paraInstant(avaliacao.dataRegistro()),
+                    Instant.now(),
+                    StatusNotificacao.ENVIADO
+            ));
         } catch (Exception e) {
             context.getLogger().severe("Falha ao enviar e-mail para avaliacao "
                     + avaliacao.id() + ": " + e.getMessage());
+
+            notificacaoRepository.salvar(new Notificacao(
+                    avaliacao.id(),
+                    avaliacao.descricao(),
+                    avaliacao.nota(),
+                    avaliacao.urgencia(),
+                    ConversorData.paraInstant(avaliacao.dataRegistro()),
+                    Instant.now(),
+                    StatusNotificacao.FALHA
+            ));
         }
     }
 }
