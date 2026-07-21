@@ -3,6 +3,7 @@ package br.com.fiap.avalieme.functions;
 import br.com.fiap.avalieme.domain.Avaliacao;
 import br.com.fiap.avalieme.domain.Urgencia;
 import br.com.fiap.avalieme.dto.AvaliacaoRequest;
+import br.com.fiap.avalieme.dto.AvaliacaoResponse;
 import br.com.fiap.avalieme.dto.AvaliacaoUrgenteMensagem;
 import br.com.fiap.avalieme.repository.CosmosAvaliacaoRepository;
 import br.com.fiap.avalieme.service.AvaliacaoService;
@@ -75,7 +76,8 @@ public class IngestFunction {
             }
 
             return request.createResponseBuilder(HttpStatus.CREATED)
-                    .body("Avaliacao " + avaliacao.id() + " registrada com urgencia " + avaliacao.urgencia())
+                    .header("Content-Type", "application/json")
+                    .body(GSON.toJson(AvaliacaoResponse.de(avaliacao)))
                     .build();
         } catch (IllegalArgumentException e) {
             return request.createResponseBuilder(HttpStatus.BAD_REQUEST)
