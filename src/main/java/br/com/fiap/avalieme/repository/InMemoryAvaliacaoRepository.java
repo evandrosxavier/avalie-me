@@ -17,4 +17,8 @@ public class InMemoryAvaliacaoRepository implements AvaliacaoRepository {
     public List<Avaliacao> listarTodas() {
         return List.copyOf(DADOS);
     }
+
+    public void limpar() {
+        DADOS.clear();
+    }
 }

@@ -88,6 +88,8 @@ public class NotifyFunction {
                     Instant.now(),
                     StatusNotificacao.FALHA
             ));
+
+            throw new RuntimeException("Falha ao enviar e-mail para avaliacao " + avaliacao.id(), e);
         }
     }
 }

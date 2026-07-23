@@ -1,0 +1,29 @@
+meta {
+  name: 1 - Sucesso
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/avaliacao
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "descricao": "Curso muito bom, aprendi bastante coisa nova",
+    "nota": 7
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isDefined
+  res.body.urgencia: isDefined
+  res.body.dataRegistro: isDefined
+}

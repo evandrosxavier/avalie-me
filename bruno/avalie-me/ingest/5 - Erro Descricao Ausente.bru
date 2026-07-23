@@ -1,0 +1,27 @@
+meta {
+  name: 5 - Erro Descricao Ausente
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/avaliacao
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "nota": 8
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body.type: contains validacao-entrada
+  res.body.detail: contains descricao
+}

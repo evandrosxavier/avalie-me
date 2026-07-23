@@ -4,10 +4,13 @@ import br.com.fiap.avalieme.domain.Avaliacao;
 
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public class RelatorioService {
+
+    private static final Locale LOCALE_RELATORIO = Locale.of("pt", "BR");
 
     public String gerarHtml(List<Avaliacao> avaliacoes) {
         StringBuilder sb = new StringBuilder();
@@ -64,7 +67,7 @@ public class RelatorioService {
                 .average()
                 .orElse(0);
         sb.append("<p class='stat'><strong>Média das notas:</strong> ")
-          .append(String.format("%.1f", media))
+          .append(String.format(LOCALE_RELATORIO, "%.1f", media))
           .append("</p>");
 
         Map<String, Long> porUrgencia = avaliacoes.stream()

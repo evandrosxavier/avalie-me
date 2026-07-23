@@ -1,0 +1,27 @@
+meta {
+  name: 7 - Erro Regra Negocio Descricao Curta
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/avaliacao
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "descricao": "curto",
+    "nota": 5
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body.type: contains regra-negocio
+}
