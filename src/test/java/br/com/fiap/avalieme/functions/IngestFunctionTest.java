@@ -145,4 +145,20 @@ class IngestFunctionTest {
         assertEquals("ALTA", corpoComoJson(resposta).get("urgencia").getAsString());
         Mockito.verify(avaliacaoUrgente).setValue(any());
     }
+
+    @Test
+    void deveRetornar500QuandoServicoLancaExcecaoInesperada() {
+        AvaliacaoService servicoComFalha = Mockito.mock(AvaliacaoService.class);
+        when(servicoComFalha.registrar(any())).thenThrow(new RuntimeException("Falha simulada no Cosmos DB"));
+
+        HttpRequestMessage<Optional<String>> request =
+                mockRequest("{\"descricao\":\"Curso muito bom, aprendi bastante coisa nova\",\"nota\":7}");
+
+        var resposta = function.processar(request, avaliacaoUrgente, context, servicoComFalha);
+
+        assertEquals(500, resposta.getStatusCode());
+        assertEquals("erro-interno", corpoComoJson(resposta).get("type").getAsString()
+                .replaceFirst(".*/erros/", ""));
+        Mockito.verifyZeroInteractions(avaliacaoUrgente);
+    }
 }

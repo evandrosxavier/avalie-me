@@ -99,6 +99,9 @@ public class IngestFunction {
                     .build();
         } catch (IllegalArgumentException e) {
             return erroRegraNegocio(request, e.getMessage());
+        } catch (Exception e) {
+            context.getLogger().severe("Erro inesperado ao processar avaliacao: " + e.getMessage());
+            return erroInterno(request, "Ocorreu um erro inesperado ao processar a avaliação");
         }
     }
 
@@ -123,6 +126,19 @@ public class IngestFunction {
                 detail,
                 "/avaliacao");
         return request.createResponseBuilder(HttpStatus.BAD_REQUEST)
+                .header("Content-Type", "application/json")
+                .body(GSON.toJson(erroResponse))
+                .build();
+    }
+
+    private static HttpResponseMessage erroInterno(HttpRequestMessage<Optional<String>> request, String detail) {
+        ErroResponse erroResponse = ErroResponse.de(
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                "Erro Interno do Servidor",
+                "erro-interno",
+                detail,
+                "/avaliacao");
+        return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
                 .header("Content-Type", "application/json")
                 .body(GSON.toJson(erroResponse))
                 .build();
