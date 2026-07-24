@@ -3,13 +3,11 @@ package br.com.fiap.avalieme.functions;
 import br.com.fiap.avalieme.domain.Notificacao;
 import br.com.fiap.avalieme.domain.StatusNotificacao;
 import br.com.fiap.avalieme.dto.AvaliacaoUrgenteMensagem;
+import br.com.fiap.avalieme.email.AcsEmailSender;
+import br.com.fiap.avalieme.email.EmailSender;
 import br.com.fiap.avalieme.repository.CosmosNotificacaoRepository;
 import br.com.fiap.avalieme.repository.NotificacaoRepository;
 import br.com.fiap.avalieme.util.ConversorData;
-import com.azure.communication.email.EmailClient;
-import com.azure.communication.email.EmailClientBuilder;
-import com.azure.communication.email.models.EmailMessage;
-import com.azure.communication.email.models.EmailSendResult;
 import com.google.gson.Gson;
 import com.microsoft.azure.functions.ExecutionContext;
 import com.microsoft.azure.functions.annotation.FunctionName;
@@ -20,10 +18,18 @@ import java.time.Instant;
 public class NotifyFunction {
 
     private static final Gson GSON = new Gson();
-    private static final String REMETENTE =
-            "DoNotReply@b3991415-9ff8-4633-9d9f-ca0a4fb29dcd.azurecomm.net";
 
-    private final NotificacaoRepository notificacaoRepository = new CosmosNotificacaoRepository();
+    private final NotificacaoRepository notificacaoRepository;
+    private final EmailSender emailSender;
+
+    public NotifyFunction() {
+        this(new CosmosNotificacaoRepository(), new AcsEmailSender());
+    }
+
+    NotifyFunction(NotificacaoRepository notificacaoRepository, EmailSender emailSender) {
+        this.notificacaoRepository = notificacaoRepository;
+        this.emailSender = emailSender;
+    }
 
     @FunctionName("notify")
     public void run(
@@ -34,6 +40,10 @@ public class NotifyFunction {
                 String mensagem,
             final ExecutionContext context) {
 
+        processar(mensagem, context);
+    }
+
+    void processar(String mensagem, ExecutionContext context) {
         AvaliacaoUrgenteMensagem avaliacao = GSON.fromJson(mensagem, AvaliacaoUrgenteMensagem.class);
 
         context.getLogger().info("Avaliacao urgente recebida - id: " + avaliacao.id()
@@ -44,27 +54,18 @@ public class NotifyFunction {
     }
 
     private void enviarEmail(AvaliacaoUrgenteMensagem avaliacao, ExecutionContext context) {
-        String connectionString = System.getenv("ACS_CONNECTION_STRING");
         String destinatario = System.getenv("EMAIL_ADMIN");
 
         try {
-            EmailClient emailClient = new EmailClientBuilder()
-                    .connectionString(connectionString)
-                    .buildClient();
-
-            EmailMessage email = new EmailMessage()
-                    .setSenderAddress(REMETENTE)
-                    .setToRecipients(destinatario)
-                    .setSubject("Avaliação urgente recebida")
-                    .setBodyPlainText(
-                            "Descrição: " + avaliacao.descricao() + "\n"
+            String status = emailSender.enviar(
+                    destinatario,
+                    "Avaliação urgente recebida",
+                    "Descrição: " + avaliacao.descricao() + "\n"
                             + "Urgência: " + avaliacao.urgencia() + "\n"
                             + "Data: " + avaliacao.dataRegistro());
 
-            EmailSendResult resultado = emailClient.beginSend(email).waitForCompletion().getValue();
-
             context.getLogger().info("E-mail enviado para avaliacao " + avaliacao.id()
-                    + " com status " + resultado.getStatus());
+                    + " com status " + status);
 
             notificacaoRepository.salvar(new Notificacao(
                     avaliacao.id(),
