@@ -1,0 +1,183 @@
+openapi: 3.0.3
+info:
+  title: avalie-me API
+  description: >
+    API serverless (Azure Functions, Java) para ingestão de avaliações de curso.
+    Cada avaliação recebida é validada, persistida no Cosmos DB e, quando a nota
+    indica urgência ALTA, publicada na fila `avaliacoes-urgentes` para notificação
+    imediata do administrador.
+  version: 1.0.0
+servers:
+  - url: https://func-avalieme-dev.azurewebsites.net/api
+    description: Ambiente dev (único ambiente implantado)
+  - url: http://localhost:7071/api
+    description: Ambiente local (Azure Functions Core Tools)
+paths:
+  /avaliacao:
+    post:
+      operationId: ingestAvaliacao
+      summary: Registra uma nova avaliação
+      description: >
+        Recebe a avaliação de um aluno sobre um curso, valida as regras de
+        negócio, persiste no Cosmos DB e deriva a urgência a partir da nota.
+        Quando a urgência calculada é ALTA, a avaliação é publicada na fila
+        `avaliacoes-urgentes` para acionar notificação imediata ao administrador.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AvaliacaoEntrada'
+      responses:
+        '201':
+          description: Avaliação registrada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvaliacaoSaida'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                descricao: O professor não respondeu nenhuma dúvida durante o módulo.
+                nota: 2
+                urgencia: ALTA
+                dataRegistro: '2026-07-23T14:32:07.123Z'
+        '400':
+          description: >
+            Requisição inválida — corpo ausente/malformado ou violação de
+            regra de negócio (nota fora da faixa, descrição ausente ou
+            muito curta).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              examples:
+                notaForaDaFaixa:
+                  summary: Nota fora do intervalo permitido (0..10)
+                  value:
+                    type: https://github.com/evandrosxavier/avalie-me/erros/regra-negocio
+                    title: Erro de Regra de Negócio
+                    status: 400
+                    detail: nota deve estar entre 0 e 10
+                    instance: /avaliacao
+                descricaoMuitoCurta:
+                  summary: Descrição com menos de 15 caracteres
+                  value:
+                    type: https://github.com/evandrosxavier/avalie-me/erros/regra-negocio
+                    title: Erro de Regra de Negócio
+                    status: 400
+                    detail: descricao muito curta para ser uma avaliacao
+                    instance: /avaliacao
+        '500':
+          description: Erro interno inesperado (ex. falha ao persistir no Cosmos DB)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+              example:
+                type: https://github.com/evandrosxavier/avalie-me/erros/erro-interno
+                title: Erro Interno do Servidor
+                status: 500
+                detail: Ocorreu um erro inesperado ao processar a avaliação
+                instance: /avaliacao
+components:
+  schemas:
+    AvaliacaoEntrada:
+      type: object
+      description: Campos enviados pelo cliente ao registrar uma avaliação.
+      properties:
+        descricao:
+          type: string
+          description: Texto da avaliação. Mínimo de 15 caracteres (após trim).
+          minLength: 15
+          example: O professor não respondeu nenhuma dúvida durante o módulo.
+        nota:
+          type: integer
+          description: Nota da avaliação, de 0 (péssimo) a 10 (excelente).
+          minimum: 0
+          maximum: 10
+          example: 2
+      required:
+        - descricao
+        - nota
+    AvaliacaoSaida:
+      type: object
+      description: >
+        Avaliação registrada, incluindo os campos derivados pelo servidor
+        (id, urgência calculada e data de registro).
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador único gerado pelo servidor.
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        descricao:
+          type: string
+          example: O professor não respondeu nenhuma dúvida durante o módulo.
+        nota:
+          type: integer
+          minimum: 0
+          maximum: 10
+          example: 2
+        urgencia:
+          $ref: '#/components/schemas/Urgencia'
+        dataRegistro:
+          type: string
+          format: date-time
+          description: Data/hora de registro da avaliação, em UTC (ISO-8601).
+          example: '2026-07-23T14:32:07.123Z'
+      required:
+        - id
+        - descricao
+        - nota
+        - urgencia
+        - dataRegistro
+    Urgencia:
+      type: string
+      description: >
+        Urgência derivada a partir da nota: ALTA quando nota <= 3,
+        MEDIA quando 3 < nota <= 6, BAIXA quando nota > 6.
+      enum:
+        - ALTA
+        - MEDIA
+        - BAIXA
+    ProblemDetail:
+      type: object
+      description: >
+        Formato padronizado de erro, seguindo Problem Details for HTTP APIs
+        (RFC 9457, que substitui a RFC 7807).
+      properties:
+        type:
+          type: string
+          format: uri
+          description: >
+            URI estável que identifica o tipo do erro, no padrão
+            `https://github.com/evandrosxavier/avalie-me/erros/{tipo}`.
+            Legível por máquina; o segmento `{tipo}` é o código do erro.
+            Valores em uso atualmente: `validacao-entrada` (corpo da
+            requisição ausente ou estruturalmente inválido), `regra-negocio`
+            (violação de regra de domínio, ex. nota fora da faixa ou
+            descrição muito curta) e `erro-interno` (falha inesperada do
+            servidor).
+          example: https://github.com/evandrosxavier/avalie-me/erros/regra-negocio
+        title:
+          type: string
+          description: Resumo curto e legível por humano do tipo do erro.
+          example: Erro de Regra de Negócio
+        status:
+          type: integer
+          description: Código de status HTTP repetido no corpo, para conveniência.
+          example: 400
+        detail:
+          type: string
+          description: Explicação legível por humano específica desta ocorrência do erro.
+          example: nota deve estar entre 0 e 10
+        instance:
+          type: string
+          description: Referência à ocorrência específica do problema.
+          example: /avaliacao
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
