@@ -112,10 +112,8 @@ Em produção real, seria o próximo passo natural de hardening. Neste projeto, 
 
 ## Lições técnicas de armadilhas encontradas
 
-- **Extension bundle:** o runtime v4 exige extension bundle v4 no `host.json` (`[4.*, 5.0.0)`). Com v3, os bindings de Storage falham silenciosamente — o `POST` retorna `201`, mas nada é publicado na fila.
 - **Cota de App Service:** o App Service Plan usa a cota do provider `Microsoft.Web`, separada da `Microsoft.Compute`. Em assinaturas recém-migradas de Free Trial, a cota do `Microsoft.Web` pode estar zerada. O SKU do plano Consumption é `Y1 VMs`.
 - **Resource group já existente prevalece na região:** a tag `<region>` do `pom.xml` só é aplicada quando o plugin cria o resource group do zero; se ele já existe, a região dele prevalece.
 - **Remetente ACS:** o endereço correto não contém `.us3.` (isso é rota interna). A fonte da verdade é a tela Email → Domínios no portal, não o cabeçalho do e-mail recebido.
 - **App Insights em West Central US:** não é suportado — por isso `<disableAppInsights>true</disableAppInsights>` no `pom.xml`, com o recurso criado separadamente em outra região.
 - **Deploy manual precisa recompilar:** o goal `azure-functions-maven-plugin:deploy` apenas empacota o que já está em `target/`, sem rodar `compile`/`package`. Executar somente `mvn azure-functions:deploy` após alterar código publica silenciosamente o jar antigo, sem qualquer erro ou aviso — o problema só aparece ao testar o comportamento em produção. O comando correto para deploy manual é `mvn clean package azure-functions:deploy`.
-- **Método de debug:** ler o erro real no log do Application Insights antes de tentar corrigir. Essa disciplina resolveu rapidamente três bugs distintos: o `.us3.` no remetente, o erro `DomainNotLinked`, e a ausência de partition key no `createItem`.
