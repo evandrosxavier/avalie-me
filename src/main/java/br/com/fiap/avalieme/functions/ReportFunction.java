@@ -12,8 +12,10 @@ import com.microsoft.azure.functions.ExecutionContext;
 import com.microsoft.azure.functions.annotation.FunctionName;
 import com.microsoft.azure.functions.annotation.TimerTrigger;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 public class ReportFunction {
@@ -27,7 +29,7 @@ public class ReportFunction {
 
     @FunctionName("report")
     public void run(
-            @TimerTrigger(name = "timer", schedule = "0 0 11 * * *") String timerInfo,
+            @TimerTrigger(name = "timer", schedule = "0 0 11 * * MON") String timerInfo,
             ExecutionContext context) {
 
         context.getLogger().info("Iniciando geração do relatório semanal");
@@ -39,12 +41,16 @@ public class ReportFunction {
         String destinatario = System.getenv("EMAIL_ADMIN");
 
         try {
-            List<Avaliacao> avaliacoes = avaliacaoRepository.listarTodas();
-            String html = relatorioService.gerarHtml(avaliacoes);
+            ZoneId fusoSaoPaulo = ZoneId.of("America/Sao_Paulo");
+            Instant fim = Instant.now();
+            Instant inicio = fim.minus(7, ChronoUnit.DAYS);
+            LocalDate dataInicio = inicio.atZone(fusoSaoPaulo).toLocalDate();
+            LocalDate dataFim = fim.atZone(fusoSaoPaulo).toLocalDate();
 
-            String nomeArquivo = "relatorio-"
-                    + LocalDate.now(ZoneId.of("America/Sao_Paulo"))
-                    + ".html";
+            List<Avaliacao> avaliacoes = avaliacaoRepository.listarPorPeriodo(inicio, fim);
+            String html = relatorioService.gerarHtml(avaliacoes, dataInicio, dataFim);
+
+            String nomeArquivo = "relatorio-" + dataFim + ".html";
             String urlRelatorio = blobRelatorioRepository.salvar(nomeArquivo, html);
 
             context.getLogger().info("Relatório publicado em: " + urlRelatorio);

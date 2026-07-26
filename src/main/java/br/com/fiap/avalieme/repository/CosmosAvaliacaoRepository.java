@@ -9,8 +9,11 @@ import com.azure.cosmos.CosmosContainer;
 import com.azure.cosmos.models.CosmosItemRequestOptions;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.PartitionKey;
+import com.azure.cosmos.models.SqlParameter;
+import com.azure.cosmos.models.SqlQuerySpec;
 import com.azure.cosmos.util.CosmosPagedIterable;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +55,29 @@ public class CosmosAvaliacaoRepository implements AvaliacaoRepository {
     public List<Avaliacao> listarTodas() {
         CosmosPagedIterable<AvaliacaoDocumento> resultados = container.queryItems(
                 "SELECT * FROM c",
+                new CosmosQueryRequestOptions(),
+                AvaliacaoDocumento.class
+        );
+
+        List<Avaliacao> avaliacoes = new ArrayList<>();
+        for (AvaliacaoDocumento documento : resultados) {
+            avaliacoes.add(toAvaliacao(documento));
+        }
+        return avaliacoes;
+    }
+
+    @Override
+    public List<Avaliacao> listarPorPeriodo(Instant inicio, Instant fim) {
+        SqlQuerySpec query = new SqlQuerySpec(
+                "SELECT * FROM c WHERE c.dataRegistro >= @inicio AND c.dataRegistro < @fim",
+                List.of(
+                        new SqlParameter("@inicio", ConversorData.paraIso(inicio)),
+                        new SqlParameter("@fim", ConversorData.paraIso(fim))
+                )
+        );
+
+        CosmosPagedIterable<AvaliacaoDocumento> resultados = container.queryItems(
+                query,
                 new CosmosQueryRequestOptions(),
                 AvaliacaoDocumento.class
         );
