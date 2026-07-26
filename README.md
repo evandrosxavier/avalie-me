@@ -1,6 +1,12 @@
+
 # avalie-me
 
-Plataforma serverless de feedback de cursos desenvolvida como Tech Challenge da Fase 4 da pós-graduação FIAP (ADJT). Alunos avaliam aulas; administradores recebem notificações imediatas para avaliações críticas e um relatório diário com resumo e link público.
+> 📂 Repositório: [https://github.com/evandrosxavier/avalie-me](https://github.com/evandrosxavier/avalie-me)
+
+Plataforma serverless de feedback de cursos, desenvolvida como Tech Challenge da Fase 4 (ADJT) da pós-graduação FIAP. Alunos avaliam aulas; administradores recebem uma **notificação imediata por e-mail** para avaliações críticas e um **relatório semanal** consolidado com link público.
+
+📄 Justificativa detalhada de cada decisão técnica e arquitetural: [`docs/decisoes.md`](docs/decisoes.md)
+📄 Especificação OpenAPI do `ingest`: [`docs/openapi.yaml`](docs/openapi.yaml)
 
 ---
 
@@ -15,10 +21,11 @@ Plataforma serverless de feedback de cursos desenvolvida como Tech Challenge da 
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                     ingest  (HttpTrigger)                           │
-│  • Valida nota (0–10) e descrição                                   │
-│  • Deriva urgência: ALTA (0–4) / MEDIA (5–7) / BAIXA (8–10)        │
+│  • Valida entrada (estrutura) e domínio (regra de negócio)          │
+│  • Deriva urgência: ALTA (0–3) / MEDIA (4–6) / BAIXA (7–10)        │
 │  • Persiste avaliação no Cosmos DB                                  │
 │  • Se ALTA → publica mensagem na Storage Queue                      │
+│  • Erros em application/problem+json (RFC 9457)                     │
 └─────────┬───────────────────────────┬───────────────────────────────┘
           │                           │
           ▼                           ▼
@@ -34,6 +41,8 @@ Plataforma serverless de feedback de cursos desenvolvida como Tech Challenge da 
                          │  • Envia e-mail via ACS                    │
                          │  • Grava Notificacao no Cosmos DB          │
                          │    (snapshot de auditoria: ENVIADO/FALHA)  │
+                         │  • Falha → relança exceção → retry nativo  │
+                         │    (5 tentativas) → poison queue           │
                          └────────────────┬───────────────────────────┘
                                           │
                               ┌───────────┴──────────┐
@@ -45,9 +54,10 @@ Plataforma serverless de feedback de cursos desenvolvida como Tech Challenge da 
                     └──────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────┐
-│              report  (TimerTrigger — diário às 8h BRT)              │
-│  • Busca todas as avaliações no Cosmos DB                           │
-│  • Gera relatório HTML (lista + média + contagens)                  │
+│         report  (TimerTrigger — semanal, segunda 8h BRT)            │
+│  • Busca avaliações dos últimos 7 dias no Cosmos DB                 │
+│  • Gera relatório HTML (layout moderno: cartões, gráfico de barras, │
+│    tabela com nota + urgência, legenda de faixas)                   │
 │  • Publica HTML no Blob Storage (link público)                      │
 │  • Envia link por e-mail via ACS                                    │
 └─────────┬───────────────────────────┬───────────────────────────────┘
@@ -64,6 +74,11 @@ Plataforma serverless de feedback de cursos desenvolvida como Tech Challenge da 
                     └──────────────────────────────┘
 
                     ┌──────────────────────────────┐
+                    │   Key Vault + Managed Identity│
+                    │  (segredos de Cosmos e ACS)   │
+                    └──────────────────────────────┘
+
+                    ┌──────────────────────────────┐
                     │   GitHub Actions              │
                     │  (deploy automatizado via     │
                     │   service principal)          │
@@ -74,7 +89,7 @@ Plataforma serverless de feedback de cursos desenvolvida como Tech Challenge da 
 
 ## Modelo de nuvem
 
-**FaaS — Functions as a Service** na **Microsoft Azure**, plano **Consumption** (serverless puro: sem servidor dedicado, cobra-se apenas pelo tempo de execução). As três funções compartilham o mesmo **Function App** (`func-avalieme-dev`) na região **West Central US** — escolhida por disponibilidade de cota do SKU `Y1` na assinatura.
+**FaaS — Functions as a Service** na **Microsoft Azure**, plano **Consumption** (serverless puro: sem servidor dedicado, cobra-se apenas pelo tempo de execução). As três funções compartilham o mesmo **Function App** (`func-avalieme-dev`) na região **West Central US** — escolhida por disponibilidade de cota do SKU `Y1` na assinatura. Justificativa completa em [`docs/decisoes.md`](docs/decisoes.md#1-modelo-de-nuvem-faas-functions-as-a-service).
 
 ---
 
@@ -83,38 +98,59 @@ Plataforma serverless de feedback de cursos desenvolvida como Tech Challenge da 
 | Recurso | Nome | Finalidade |
 |---|---|---|
 | Function App | `func-avalieme-dev` | hospeda as três funções |
-| Cosmos DB | `cosmos-avalieme-dev` | persistência de avaliações e notificações |
+| Cosmos DB | `cosmos-avalieme-dev` | persistência de avaliações e notificações (NoSQL, serverless) |
 | Communication Service | `acs-avalieme-dev` | envio de e-mails |
 | Email Communication Service | `acs-email-avalieme-dev` | domínio remetente |
 | Storage Account | `funcavaliemedev65741` | fila de mensagens + blobs de relatório |
 | Application Insights | `appi-avalieme-dev` | monitoramento e telemetria |
 | App Service Plan | `asp-avalieme-dev` | plano Consumption |
+| Key Vault | `kv-avalieme-dev` | segredos (`COSMOS_CONNECTION_STRING`, `ACS_CONNECTION_STRING`) |
 
 ---
 
 ## Funções
 
+Três funções, cada uma com responsabilidade única: **ingest** (recebimento), **notify** (notificação) e **report** (relatório) — atendendo à regra de separação de responsabilidades do desafio.
+
 ### `ingest` — HttpTrigger
 **Trigger:** `POST /api/avaliacao`
 
-Recebe o feedback do aluno, valida, deriva a urgência e persiste no Cosmos DB. Se a urgência for ALTA, publica uma mensagem na fila para notificação assíncrona.
+Recebe o feedback do aluno, valida em duas camadas (entrada estrutural + regra de domínio), deriva a urgência e persiste no Cosmos DB. Se a urgência for ALTA, publica uma mensagem na fila para notificação assíncrona.
 
 **Request:**
 ```json
 {
-  "descricao": "string",
+  "descricao": "string (mínimo 15 caracteres)",
   "nota": 0
+}
+```
+
+**Response de sucesso (`201 Created`):**
+```json
+{
+  "id": "uuid",
+  "descricao": "string",
+  "nota": 0,
+  "urgencia": "ALTA | MEDIA | BAIXA",
+  "dataRegistro": "2026-07-25T11:00:00Z"
 }
 ```
 
 **Regras de urgência:**
 | Nota | Urgência |
 |---|---|
-| 0 – 4 | ALTA |
-| 5 – 7 | MEDIA |
-| 8 – 10 | BAIXA |
+| 0 – 3 | ALTA |
+| 4 – 6 | MEDIA |
+| 7 – 10 | BAIXA |
 
-**Responses:** `201 Created` (sucesso) · `400 Bad Request` (payload inválido)
+**Responses de erro** — formato `application/problem+json` ([RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)), com `type` indicando a categoria (`validacao-entrada`, `regra-negocio`, `erro-interno`):
+
+| Status | Quando |
+|---|---|
+| `400 Bad Request` | payload estruturalmente inválido (JSON malformado, campo ausente/tipo errado) ou violação de regra de negócio (nota fora de 0–10, descrição curta) |
+| `500 Internal Server Error` | falha inesperada (ex.: indisponibilidade do Cosmos DB) — capturada por catch-all, nunca vaza sem tratamento |
+
+Especificação completa: [`docs/openapi.yaml`](docs/openapi.yaml).
 
 ---
 
@@ -123,25 +159,58 @@ Recebe o feedback do aluno, valida, deriva a urgência e persiste no Cosmos DB. 
 
 Acordada automaticamente quando o `ingest` publica uma avaliação urgente. Envia e-mail ao administrador via ACS e grava um snapshot de auditoria (`Notificacao`) no Cosmos DB com status `ENVIADO` ou `FALHA`.
 
+**Dados do e-mail de aviso:** descrição, urgência, data de envio.
+
 **Campos do snapshot de auditoria:**
 `avaliacaoId` · `descricao` · `nota` · `urgencia` · `dataRegistroAvaliacao` · `dataEnvio` · `status`
+
+**Reprocessamento:** se o envio de e-mail falhar, a `Notificacao` é gravada com status `FALHA` e a exceção é relançada, acionando o **retry nativo do Azure Functions** (5 tentativas). Se todas falharem, a mensagem vai para a fila `avaliacoes-urgentes-poison` para inspeção manual.
 
 ---
 
 ### `report` — TimerTrigger
-**Trigger:** diariamente às 8h (horário de Brasília)  
-**Cron:** `0 0 11 * * *` (UTC)
+**Trigger:** semanalmente, toda segunda-feira às 8h (horário de Brasília)
+**Cron:** `0 0 11 * * MON` (UTC)
 
-Busca todas as avaliações no Cosmos DB, gera um relatório em HTML com duas seções e publica no Blob Storage com acesso público. Envia o link por e-mail ao administrador.
+Busca as avaliações dos **últimos 7 dias** no Cosmos DB, gera um relatório em HTML com layout moderno e publica no Blob Storage com acesso público. Envia o link por e-mail ao administrador.
 
-**Seções do relatório:**
-- **Avaliações recebidas:** descrição, urgência e data de cada avaliação
-- **Resumo quantitativo:** média das notas, total por urgência, total por dia
+**Conteúdo do relatório:**
+- **Cabeçalho** com o período coberto (segunda a domingo da semana anterior)
+- **Cartões de resumo:** total de avaliações, média das notas, contagem por urgência
+- **Gráfico de barras** — avaliações por dia
+- **Tabela de avaliações recebidas:** descrição, nota, urgência (badge colorido) e data
+- **Legenda** com os intervalos de nota que definem cada urgência
 
 **URL do relatório:**
 ```
 https://funcavaliemedev65741.blob.core.windows.net/relatorios/relatorio-YYYY-MM-DD.html
 ```
+
+---
+
+## Testes
+
+**28 testes automatizados** (JUnit 5 + Mockito), cobrindo validação de entrada, regra de negócio, derivação de urgência, geração do relatório e o fluxo de notificação (sucesso e falha com retry):
+
+| Classe | Testes | Cobre |
+|---|---|---|
+| `AvaliacaoServiceTest` | 9 | validação, persistência, derivação de urgência |
+| `IngestFunctionTest` | 9 | validação estrutural, regra de negócio, sucesso, catch-all de 500 |
+| `NotifyFunctionTest` | 2 | envio de e-mail (sucesso) e falha com retry |
+| `RelatorioServiceTest` | 8 | média, contagens, layout do relatório |
+
+```bash
+mvn test
+```
+
+**Collection Postman** com requisições prontas contra o `ingest` (sucesso, erros estruturais e de regra de negócio), com scripts `pm.test` validando status e formato de corpo:
+
+📥 [avalie-me_postman_collection.json](avalie-me_postman_collection.json)
+
+**Como importar:**
+1. Abra o Postman → **Import** → selecione `avalie-me_postman_collection.json`
+2. Importe também os environments `avalie-me_postman_environment_local.json` e `avalie-me_postman_environment_dev.json`
+3. Selecione o environment desejado (`avalie-me - local` ou `avalie-me - dev`) e rode as requisições
 
 ---
 
@@ -153,20 +222,21 @@ https://funcavaliemedev65741.blob.core.windows.net/relatorios/relatorio-YYYY-MM-
 - Azure CLI autenticado (`az login`)
 - Conta Azure com cota disponível para plano Consumption em West Central US
 
-### Variáveis de ambiente obrigatórias no Function App
+### Variáveis de ambiente do Function App
 
-| Variável | Descrição |
-|---|---|
-| `COSMOS_CONNECTION_STRING` | Connection string do Cosmos DB |
-| `ACS_CONNECTION_STRING` | Connection string do Azure Communication Services |
-| `EMAIL_ADMIN` | E-mail do destinatário dos alertas e relatórios |
-| `AzureWebJobsStorage` | Connection string da Storage Account (fila + blob) |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Connection string do Application Insights |
+| Variável | Origem | Descrição |
+|---|---|---|
+| `COSMOS_CONNECTION_STRING` | Key Vault (`kv-avalieme-dev`) | Connection string do Cosmos DB |
+| `ACS_CONNECTION_STRING` | Key Vault (`kv-avalieme-dev`) | Connection string do Azure Communication Services |
+| `EMAIL_ADMIN` | variável direta | E-mail do destinatário dos alertas e relatórios |
+| `AzureWebJobsStorage` | variável direta | Connection string da Storage Account (fila + blob) |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | variável direta | Connection string do Application Insights |
 
 ### Deploy manual
 ```bash
 mvn clean package azure-functions:deploy
 ```
+> ⚠️ O goal `azure-functions:deploy` sozinho **não recompila** — sempre usar `clean package` antes, senão o deploy publica um jar desatualizado.
 
 ### Deploy automatizado
 O repositório possui um workflow GitHub Actions (`.github/workflows/deploy.yml`) com disparo manual (`workflow_dispatch`). Autenticação via service principal armazenado como secret `AZURE_CREDENTIALS` no repositório.
@@ -194,12 +264,16 @@ traces
 
 ---
 
-## Segurança
+## Segurança e governança de acesso
 
-- Connection strings armazenadas como **variáveis de ambiente** do Function App (não no código-fonte).
-- CI/CD usa **service principal** escopado ao resource group com menor privilégio.
-- Blob Storage com acesso público restrito ao container `relatorios` — os demais containers permanecem privados.
-- **Key Vault + Managed Identity:** migração das connection strings para cofre planejada (próxima iteração).
+- **Segredos no Key Vault (`kv-avalieme-dev`):** `COSMOS_CONNECTION_STRING` e `ACS_CONNECTION_STRING` não ficam em variável de ambiente em texto puro — são referenciados via `@Microsoft.KeyVault(...)` e resolvidos em runtime.
+- **Managed Identity (system-assigned):** o `func-avalieme-dev` acessa o Key Vault via identidade gerenciada pelo Azure AD, sem credencial fixa armazenada em lugar nenhum — a política de acesso concede apenas permissão de leitura de segredo (governança de menor privilégio).
+- **Rotação de chave:** a chave do Cosmos DB foi regenerada após a migração para o Key Vault; a `AccountKey` da Storage também foi renovada quando exposta acidentalmente em sessão de terminal.
+- **CI/CD** usa **service principal** escopado ao resource group com menor privilégio.
+- **Blob Storage** com acesso público restrito ao container `relatorios` — os demais containers (fila, dados internos) permanecem privados.
+- **Erros estruturados:** respostas de erro do `ingest` seguem RFC 9457 (`application/problem+json`), sem vazar stack trace ou detalhes internos ao cliente.
+
+Justificativa detalhada de cada decisão de segurança: [`docs/decisoes.md`](docs/decisoes.md).
 
 ---
 
@@ -214,7 +288,12 @@ src/main/java/br/com/fiap/avalieme/
 │   └── Urgencia.java           # enum ALTA | MEDIA | BAIXA
 ├── dto/
 │   ├── AvaliacaoRequest.java         # entrada do ingest
-│   └── AvaliacaoUrgenteMensagem.java # mensagem da fila (bilhete gordo)
+│   ├── AvaliacaoResponse.java        # saída 201 do ingest
+│   ├── AvaliacaoUrgenteMensagem.java # mensagem da fila (bilhete gordo)
+│   └── ErroResponse.java             # erro RFC 9457 (application/problem+json)
+├── email/
+│   ├── EmailSender.java        # interface
+│   └── AcsEmailSender.java     # impl via Azure Communication Services
 ├── functions/
 │   ├── IngestFunction.java    # HttpTrigger
 │   ├── NotifyFunction.java    # QueueTrigger
@@ -231,4 +310,12 @@ src/main/java/br/com/fiap/avalieme/
 │   └── RelatorioService.java   # geração do HTML do relatório
 └── util/
     └── ConversorData.java      # conversão Instant ↔ String ISO-8601
+
+docs/
+├── decisoes.md   # decisões de arquitetura, com justificativa
+└── openapi.yaml  # especificação OpenAPI 3.0.3 do ingest
+
+avalie-me_postman_collection.json          # collection de testes manuais (Postman)
+avalie-me_postman_environment_local.json   # environment local
+avalie-me_postman_environment_dev.json     # environment dev (func-avalieme-dev)
 ```
