@@ -1,0 +1,293 @@
+{
+  "info": {
+    "_postman_id": "avalie-me-collection-v1",
+    "name": "📋 Avalie-me API",
+    "description": "Collection do endpoint ingest do avalie-me (Tech Challenge FIAP Fase 4). Inclui o cenário de sucesso, 4 cenários de erro de validação estrutural (400, type=validacao-entrada) e 2 cenários de violação de regra de negócio (400, type=regra-negocio).\n\nVariáveis:\n- baseUrl: preenchida pelo environment selecionado (local ou dev)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:7071",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "📝 Ingest",
+      "description": "POST /api/avaliacao — recebe o feedback do aluno, valida em duas camadas e persiste no Cosmos DB",
+      "item": [
+        {
+          "name": "1 - Sucesso",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Corpo tem id, urgencia e dataRegistro', function () {",
+                  "    pm.expect(jsonData.id).to.exist;",
+                  "    pm.expect(jsonData.urgencia).to.exist;",
+                  "    pm.expect(jsonData.dataRegistro).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Curso muito bom, aprendi bastante coisa nova\",\n  \"nota\": 7\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/avaliacao",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "avaliacao"]
+            },
+            "description": "Cenário de sucesso: payload válido, retorna 201 com o AvaliacaoResponse (id, descricao, nota, urgencia, dataRegistro)."
+          }
+        },
+        {
+          "name": "2 - Erro Corpo Ausente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('type contém validacao-entrada', function () {",
+                  "    pm.expect(jsonData.type).to.include('validacao-entrada');",
+                  "});",
+                  "pm.test('status é 400', function () {",
+                  "    pm.expect(jsonData.status).to.eql(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/avaliacao",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "avaliacao"]
+            },
+            "description": "Corpo vazio: falha de validação estrutural (400, application/problem+json)."
+          }
+        },
+        {
+          "name": "3 - Erro JSON Invalido",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('type contém validacao-entrada', function () {",
+                  "    pm.expect(jsonData.type).to.include('validacao-entrada');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{nota: abc}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/avaliacao",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "avaliacao"]
+            },
+            "description": "JSON malformado: falha de parse, tratada como erro de validação estrutural (400)."
+          }
+        },
+        {
+          "name": "4 - Erro Nota Ausente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('type contém validacao-entrada', function () {",
+                  "    pm.expect(jsonData.type).to.include('validacao-entrada');",
+                  "});",
+                  "pm.test('detail menciona nota', function () {",
+                  "    pm.expect(jsonData.detail).to.include('nota');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Curso muito bom, aprendi bastante coisa nova\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/avaliacao",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "avaliacao"]
+            },
+            "description": "Campo nota ausente: falha de validação estrutural (400)."
+          }
+        },
+        {
+          "name": "5 - Erro Descricao Ausente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('type contém validacao-entrada', function () {",
+                  "    pm.expect(jsonData.type).to.include('validacao-entrada');",
+                  "});",
+                  "pm.test('detail menciona descricao', function () {",
+                  "    pm.expect(jsonData.detail).to.include('descricao');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nota\": 8\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/avaliacao",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "avaliacao"]
+            },
+            "description": "Campo descricao ausente: falha de validação estrutural (400)."
+          }
+        },
+        {
+          "name": "6 - Erro Regra Negocio Nota Fora Range",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('type contém regra-negocio', function () {",
+                  "    pm.expect(jsonData.type).to.include('regra-negocio');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Curso muito bom, aprendi bastante coisa nova\",\n  \"nota\": 15\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/avaliacao",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "avaliacao"]
+            },
+            "description": "Nota fora do intervalo 0-10: passa na validação estrutural, falha na regra de negócio (400)."
+          }
+        },
+        {
+          "name": "7 - Erro Regra Negocio Descricao Curta",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('type contém regra-negocio', function () {",
+                  "    pm.expect(jsonData.type).to.include('regra-negocio');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"curto\",\n  \"nota\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/avaliacao",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "avaliacao"]
+            },
+            "description": "Descrição com menos de 15 caracteres: passa na validação estrutural, falha na regra de negócio (400)."
+          }
+        }
+      ]
+    }
+  ]
+}
