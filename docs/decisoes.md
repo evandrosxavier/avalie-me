@@ -10,6 +10,21 @@ O **avalie-me** é uma plataforma de feedback: um aluno avalia um curso e, quand
 
 A aplicação usa **Azure Functions** — modelo **FaaS**, a forma mais granular de serverless (frequentemente descrita como uma evolução do PaaS). Não há sistema operacional, runtime ou servidor lógico para gerenciar: o código "acorda" a cada evento e a cobrança é apenas pela execução. Atende diretamente ao requisito de implementar uma solução serverless.
 
+A escolha se justifica por dois motivos complementares:
+
+1. **Natureza da carga de trabalho.** A carga de eventos do avalie-me é **intermitente e imprevisível**, não constante: uma avaliação chega quando um aluno decide enviá-la, uma notificação urgente ocorre esporadicamente, e o relatório roda uma vez por semana. Não há necessidade de um serviço ativo 24 horas por dia esperando requisições — FaaS permite que a infraestrutura escale a zero nos períodos ociosos e suba automaticamente só quando o evento acontece.
+2. **Delegação total da infraestrutura ao provedor.** Não há provisionamento de VM, aplicação de patch de sistema operacional, gerenciamento de runtime ou configuração de load balancer — tudo isso é responsabilidade da Azure. Isso reduz o custo operacional (paga-se apenas pelo uso, modelo *pay-per-execution*) e a complexidade de manter o ambiente, além de trazer escalonamento automático (absorve picos sem intervenção manual) e alta disponibilidade nativa (redundância e recuperação de falha ficam a cargo da plataforma).
+
+**Componentes envolvidos na solução**, todos nativos do ecossistema Azure:
+
+- **3 Azure Functions**, cada uma com um gatilho (*trigger*) diferente: `ingest` (**HttpTrigger**), `notify` (**QueueTrigger**) e `report` (**TimerTrigger**).
+- **Cosmos DB** — persistência das avaliações e das notificações.
+- **Storage Queue** — desacopla `ingest` de `notify` via mensageria assíncrona.
+- **Blob Storage** — hospeda o relatório HTML semanal com acesso público.
+- **Azure Communication Services (ACS)** — envio de e-mail ao administrador.
+- **Application Insights** — monitoramento e telemetria das três funções.
+- **Key Vault + Managed Identity** — armazenamento seguro dos segredos de Cosmos e ACS.
+
 ## 2. Plano Consumption (e a região resultante)
 
 O Function App roda em **plano Consumption** (serverless de verdade: nenhum servidor dedicado ligado 24/7). A região escolhida foi **West Central US** — não por latência, mas por **disponibilidade de cota** do SKU `Y1` (Consumption): na assinatura utilizada, `Y1` só estava disponível em West Central US e India South Central, com a maioria das demais regiões (incluindo Brazil South) com cota zero. Fica a lição: em cloud, a escolha de região é condicionada pela cota/capacidade real da assinatura, não só pela geografia.
