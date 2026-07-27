@@ -62,7 +62,7 @@ public class NotifyFunction {
                     "Avaliação urgente recebida",
                     "Descrição: " + avaliacao.descricao() + "\n"
                             + "Urgência: " + avaliacao.urgencia() + "\n"
-                            + "Data: " + avaliacao.dataRegistro());
+                            + "Data: " + ConversorData.paraDataHoraSaoPaulo(avaliacao.dataRegistro()));
 
             context.getLogger().info("E-mail enviado para avaliacao " + avaliacao.id()
                     + " com status " + status);
