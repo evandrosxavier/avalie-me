@@ -246,23 +246,29 @@ Busca as avaliações da **semana civil anterior fechada** — de segunda-feira 
 - **Tabela de avaliações recebidas:** descrição, nota, urgência (badge colorido) e data
 - **Legenda** com os intervalos de nota que definem cada urgência
 
-**URL do relatório:**
+**URL do relatório:** o nome do arquivo usa a data do **domingo que fecha a semana coberta**.
 ```
 https://funcavaliemedev65741.blob.core.windows.net/relatorios/relatorio-YYYY-MM-DD.html
+```
+
+Relatório mais recente (semana de 20/07 a 26/07 de 2026):
+```
+https://funcavaliemedev65741.blob.core.windows.net/relatorios/relatorio-2026-07-26.html
 ```
 
 ---
 
 ## Testes
 
-**28 testes automatizados** (JUnit 5 + Mockito), cobrindo validação de entrada, regra de negócio, derivação de urgência, geração do relatório e o fluxo de notificação (sucesso e falha com retry):
+**36 testes automatizados** (JUnit 5 + Mockito), cobrindo validação de entrada, regra de negócio, derivação de urgência, janela do relatório semanal, geração do relatório e o fluxo de notificação (sucesso e falha com retry):
 
 | Classe | Testes | Cobre |
 |---|---|---|
 | `AvaliacaoServiceTest` | 9 | validação, persistência, derivação de urgência |
-| `IngestFunctionTest` | 9 | validação estrutural, regra de negócio, sucesso, catch-all de 500 |
+| `IngestFunctionTest` | 12 | validação estrutural, regra de negócio, sucesso, catch-all de 500 |
 | `NotifyFunctionTest` | 2 | envio de e-mail (sucesso) e falha com retry |
 | `RelatorioServiceTest` | 8 | média, contagens, layout do relatório |
+| `JanelaSemanalTest` | 5 | semana anterior fechada, limites em BRT, execução fora da segunda |
 
 ```bash
 mvn test
