@@ -378,9 +378,11 @@ src/main/java/br/com/fiap/avalieme/
 │   └── BlobRelatorioRepository.java      # upload HTML + URL pública
 ├── service/
 │   ├── AvaliacaoService.java   # validação e derivação de urgência
-│   └── RelatorioService.java   # geração do HTML do relatório
+│   ├── RelatorioService.java   # geração do HTML do relatório
+│   └── ValidacaoException.java # agrupa todos os erros de validação
 └── util/
-    └── ConversorData.java      # conversão Instant ↔ String ISO-8601
+    ├── ConversorData.java      # conversão Instant ↔ String ISO-8601
+    └── JanelaSemanal.java      # semana civil fechada (segunda a domingo)
 
 docs/
 ├── decisoes.md   # decisões de arquitetura, com justificativa

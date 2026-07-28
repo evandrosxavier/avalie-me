@@ -123,6 +123,22 @@ O `Content-Type: text/html; charset=UTF-8` é definido via `BlobHttpHeaders` ap�
 
 Em produção real, seria o próximo passo natural de hardening. Neste projeto, o custo/benefício não compensou dado o prazo — saber até onde vale endurecer a segurança é parte da decisão arquitetural, não apenas aplicar o máximo possível de controles disponíveis.
 
+## 21. Validação acumulada em uma única resposta
+
+A validação original interrompia no primeiro erro encontrado: uma requisição com corpo `{}` respondia apenas `"nota é obrigatória"`, escondendo que a `descricao` também faltava. Funcionalmente correto, mas obriga o cliente a descobrir os problemas um por vez, uma requisição de cada vez.
+
+As duas camadas passaram a **acumular** os erros. Na borda HTTP a lista é montada direto na `IngestFunction`; no domínio, o `AvaliacaoService` agrupa os erros e os transporta na `ValidacaoException`. A exceção estende `IllegalArgumentException` de propósito — o catch existente na função continua válido, e o tratamento específico é um `catch` adicional antes dele, sem quebrar quem já dependia do comportamento anterior.
+
+O formato RFC 9457 acomoda isso sem invenção: o `detail` traz o resumo legível e o campo `errors` lista cada problema separadamente. O campo é omitido quando não há lista aplicável (corpo ausente, JSON malformado), em vez de aparecer como array vazio — ausência e vazio significam coisas diferentes.
+
+## 22. Janela do relatório: semana civil fechada, não janela móvel
+
+A primeira versão do `report` calculava o período como `Instant.now()` menos 7 dias. Rodando na segunda-feira às 8h, isso cobria da segunda anterior 8h até a segunda atual 8h — uma janela **móvel**, ancorada no instante da execução. Dois defeitos decorriam disso: avaliações registradas na segunda-feira antes das 8h entravam no relatório da própria semana e não apareciam no da semana seguinte; e reprocessar o relatório em outro dia produzia um recorte diferente.
+
+A janela passou a ser derivada do **calendário** (`JanelaSemanal`): a partir da data de referência no fuso `America/Sao_Paulo`, recua até a segunda-feira da semana corrente e devolve a semana imediatamente anterior — segunda 00:00 (inclusivo) até a segunda seguinte 00:00 (exclusivo). O dia da execução nunca entra no recorte.
+
+O fim exclusivo casa com o `>= @inicio AND < @fim` que a consulta ao Cosmos já usava, de modo que nenhum registro é contado duas vezes nem se perde na fronteira entre semanas. E como o resultado não depende mais do horário do disparo, o relatório virou uma função pura da semana: reprocessá-lo em qualquer dia produz exatamente o mesmo documento — propriedade que o teste `JanelaSemanalTest` fixa explicitamente.
+
 ---
 
 ## Lições técnicas de armadilhas encontradas
