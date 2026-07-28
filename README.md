@@ -55,7 +55,7 @@ Plataforma serverless de feedback de cursos, desenvolvida como Tech Challenge da
 
 ┌─────────────────────────────────────────────────────────────────────┐
 │         report  (TimerTrigger — semanal, segunda 8h BRT)            │
-│  • Busca avaliações dos últimos 7 dias no Cosmos DB                 │
+│  • Busca avaliações da semana anterior (seg a dom) no Cosmos DB     │
 │  • Gera relatório HTML (layout moderno: cartões, gráfico de barras, │
 │    tabela com nota + urgência, legenda de faixas)                   │
 │  • Publica HTML no Blob Storage (link público)                      │
@@ -237,7 +237,7 @@ Acordada automaticamente quando o `ingest` publica uma avaliação urgente. Envi
 **Trigger:** semanalmente, toda segunda-feira às 8h (horário de Brasília)
 **Cron:** `0 0 11 * * MON` (UTC)
 
-Busca as avaliações dos **últimos 7 dias** no Cosmos DB, gera um relatório em HTML com layout moderno e publica no Blob Storage com acesso público. Envia o link por e-mail ao administrador.
+Busca as avaliações da **semana civil anterior fechada** — de segunda-feira 00:00 a domingo 23:59:59 no fuso de São Paulo, sem incluir o dia da execução — no Cosmos DB, gera um relatório em HTML com layout moderno e publica no Blob Storage com acesso público. Envia o link por e-mail ao administrador.
 
 **Conteúdo do relatório:**
 - **Cabeçalho** com o período coberto (segunda a domingo da semana anterior)

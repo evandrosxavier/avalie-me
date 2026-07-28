@@ -5,6 +5,7 @@ import br.com.fiap.avalieme.repository.AvaliacaoRepository;
 import br.com.fiap.avalieme.repository.BlobRelatorioRepository;
 import br.com.fiap.avalieme.repository.CosmosAvaliacaoRepository;
 import br.com.fiap.avalieme.service.RelatorioService;
+import br.com.fiap.avalieme.util.JanelaSemanal;
 import com.azure.communication.email.EmailClient;
 import com.azure.communication.email.EmailClientBuilder;
 import com.azure.communication.email.models.EmailMessage;
@@ -12,10 +13,8 @@ import com.microsoft.azure.functions.ExecutionContext;
 import com.microsoft.azure.functions.annotation.FunctionName;
 import com.microsoft.azure.functions.annotation.TimerTrigger;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 public class ReportFunction {
@@ -42,15 +41,13 @@ public class ReportFunction {
 
         try {
             ZoneId fusoSaoPaulo = ZoneId.of("America/Sao_Paulo");
-            Instant fim = Instant.now();
-            Instant inicio = fim.minus(7, ChronoUnit.DAYS);
-            LocalDate dataInicio = inicio.atZone(fusoSaoPaulo).toLocalDate();
-            LocalDate dataFim = fim.atZone(fusoSaoPaulo).toLocalDate();
+            JanelaSemanal semana = JanelaSemanal.semanaAnteriorA(LocalDate.now(fusoSaoPaulo), fusoSaoPaulo);
 
-            List<Avaliacao> avaliacoes = avaliacaoRepository.listarPorPeriodo(inicio, fim);
-            String html = relatorioService.gerarHtml(avaliacoes, dataInicio, dataFim);
+            List<Avaliacao> avaliacoes =
+                    avaliacaoRepository.listarPorPeriodo(semana.inicio(), semana.fimExclusivo());
+            String html = relatorioService.gerarHtml(avaliacoes, semana.primeiroDia(), semana.ultimoDia());
 
-            String nomeArquivo = "relatorio-" + dataFim + ".html";
+            String nomeArquivo = "relatorio-" + semana.ultimoDia() + ".html";
             String urlRelatorio = blobRelatorioRepository.salvar(nomeArquivo, html);
 
             context.getLogger().info("Relatório publicado em: " + urlRelatorio);
