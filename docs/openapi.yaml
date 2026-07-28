@@ -51,22 +51,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
               examples:
+                camposObrigatoriosAusentes:
+                  summary: Corpo sem nota e sem descricao — todos os erros de uma vez
+                  value:
+                    type: https://github.com/evandrosxavier/avalie-me/erros/validacao-entrada
+                    title: Erro de Validação
+                    status: 400
+                    detail: 'Requisição inválida: nota é obrigatória; descricao é obrigatória'
+                    instance: /avaliacao
+                    errors:
+                      - nota é obrigatória
+                      - descricao é obrigatória
                 notaForaDaFaixa:
                   summary: Nota fora do intervalo permitido (0..10)
                   value:
                     type: https://github.com/evandrosxavier/avalie-me/erros/regra-negocio
                     title: Erro de Regra de Negócio
                     status: 400
-                    detail: nota deve estar entre 0 e 10
+                    detail: 'Requisição inválida: nota deve estar entre 0 e 10'
                     instance: /avaliacao
+                    errors:
+                      - nota deve estar entre 0 e 10
                 descricaoMuitoCurta:
                   summary: Descrição com menos de 15 caracteres
                   value:
                     type: https://github.com/evandrosxavier/avalie-me/erros/regra-negocio
                     title: Erro de Regra de Negócio
                     status: 400
-                    detail: descricao muito curta para ser uma avaliacao
+                    detail: 'Requisição inválida: descricao muito curta para ser uma avaliacao'
                     instance: /avaliacao
+                    errors:
+                      - descricao muito curta para ser uma avaliacao
         '500':
           description: Erro interno inesperado (ex. falha ao persistir no Cosmos DB)
           content:
@@ -175,6 +190,17 @@ components:
           type: string
           description: Referência à ocorrência específica do problema.
           example: /avaliacao
+        errors:
+          type: array
+          description: >
+            Lista com todos os erros de validação encontrados na requisição,
+            para que o cliente não precise corrigir um campo por vez. Omitido
+            quando não há lista aplicável (corpo ausente ou JSON malformado).
+          items:
+            type: string
+          example:
+            - nota é obrigatória
+            - descricao é obrigatória
       required:
         - type
         - title

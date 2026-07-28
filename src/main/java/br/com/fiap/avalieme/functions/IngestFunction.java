@@ -8,12 +8,15 @@ import br.com.fiap.avalieme.dto.AvaliacaoUrgenteMensagem;
 import br.com.fiap.avalieme.dto.ErroResponse;
 import br.com.fiap.avalieme.repository.CosmosAvaliacaoRepository;
 import br.com.fiap.avalieme.service.AvaliacaoService;
+import br.com.fiap.avalieme.service.ValidacaoException;
 import br.com.fiap.avalieme.util.ConversorData;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import com.microsoft.azure.functions.*;
 import com.microsoft.azure.functions.annotation.*;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class IngestFunction {
@@ -76,12 +79,15 @@ public class IngestFunction {
             return erro(request, "Corpo da requisição ausente");
         }
 
+        List<String> errosEntrada = new ArrayList<>();
         if (avaliacaoRequest.nota() == null) {
-            return erro(request, "nota é obrigatória");
+            errosEntrada.add("nota é obrigatória");
         }
-
         if (avaliacaoRequest.descricao() == null || avaliacaoRequest.descricao().isBlank()) {
-            return erro(request, "descricao é obrigatória");
+            errosEntrada.add("descricao é obrigatória");
+        }
+        if (!errosEntrada.isEmpty()) {
+            return erro(request, "Requisição inválida: " + String.join("; ", errosEntrada), errosEntrada);
         }
 
         try {
@@ -97,8 +103,10 @@ public class IngestFunction {
                     .header("Content-Type", "application/json")
                     .body(GSON.toJson(AvaliacaoResponse.de(avaliacao)))
                     .build();
+        } catch (ValidacaoException e) {
+            return erroRegraNegocio(request, "Requisição inválida: " + e.getMessage(), e.erros());
         } catch (IllegalArgumentException e) {
-            return erroRegraNegocio(request, e.getMessage());
+            return erroRegraNegocio(request, e.getMessage(), null);
         } catch (Exception e) {
             context.getLogger().severe("Erro inesperado ao processar avaliacao: " + e.getMessage());
             return erroInterno(request, "Ocorreu um erro inesperado ao processar a avaliação");
@@ -106,25 +114,33 @@ public class IngestFunction {
     }
 
     private static HttpResponseMessage erro(HttpRequestMessage<Optional<String>> request, String detail) {
+        return erro(request, detail, null);
+    }
+
+    private static HttpResponseMessage erro(HttpRequestMessage<Optional<String>> request, String detail,
+                                            List<String> errors) {
         ErroResponse erroResponse = ErroResponse.de(
                 HttpStatus.BAD_REQUEST.value(),
                 "Erro de Validação",
                 "validacao-entrada",
                 detail,
-                "/avaliacao");
+                "/avaliacao",
+                errors);
         return request.createResponseBuilder(HttpStatus.BAD_REQUEST)
                 .header("Content-Type", "application/json")
                 .body(GSON.toJson(erroResponse))
                 .build();
     }
 
-    private static HttpResponseMessage erroRegraNegocio(HttpRequestMessage<Optional<String>> request, String detail) {
+    private static HttpResponseMessage erroRegraNegocio(HttpRequestMessage<Optional<String>> request, String detail,
+                                                        List<String> errors) {
         ErroResponse erroResponse = ErroResponse.de(
                 HttpStatus.BAD_REQUEST.value(),
                 "Erro de Regra de Negócio",
                 "regra-negocio",
                 detail,
-                "/avaliacao");
+                "/avaliacao",
+                errors);
         return request.createResponseBuilder(HttpStatus.BAD_REQUEST)
                 .header("Content-Type", "application/json")
                 .body(GSON.toJson(erroResponse))

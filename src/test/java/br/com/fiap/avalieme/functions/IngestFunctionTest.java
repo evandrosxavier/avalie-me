@@ -99,6 +99,40 @@ class IngestFunctionTest {
     }
 
     @Test
+    void deveListarTodosOsCamposAusentesQuandoCorpoForJsonVazio() {
+        HttpRequestMessage<Optional<String>> request = mockRequest("{}");
+
+        var resposta = function.processar(request, avaliacaoUrgente, context, service);
+
+        assertEquals(400, resposta.getStatusCode());
+        JsonObject corpo = corpoComoJson(resposta);
+        assertTrue(corpo.get("detail").getAsString().contains("nota"));
+        assertTrue(corpo.get("detail").getAsString().contains("descricao"));
+        assertEquals(2, corpo.getAsJsonArray("errors").size());
+    }
+
+    @Test
+    void deveListarTodosOsErrosDeRegraDeNegocio() {
+        HttpRequestMessage<Optional<String>> request = mockRequest("{\"descricao\":\"curto\",\"nota\":15}");
+
+        var resposta = function.processar(request, avaliacaoUrgente, context, service);
+
+        assertEquals(400, resposta.getStatusCode());
+        JsonObject corpo = corpoComoJson(resposta);
+        assertEquals("regra-negocio", corpo.get("type").getAsString().replaceFirst(".*/erros/", ""));
+        assertEquals(2, corpo.getAsJsonArray("errors").size());
+    }
+
+    @Test
+    void naoDeveIncluirCampoErrorsQuandoCorpoAusente() {
+        HttpRequestMessage<Optional<String>> request = mockRequest(null);
+
+        var resposta = function.processar(request, avaliacaoUrgente, context, service);
+
+        assertFalse(corpoComoJson(resposta).has("errors"));
+    }
+
+    @Test
     void deveRetornar400ComRegraDeNegocioQuandoNotaForaDoRange() {
         HttpRequestMessage<Optional<String>> request =
                 mockRequest("{\"descricao\":\"Curso muito bom, aprendi bastante coisa nova\",\"nota\":15}");

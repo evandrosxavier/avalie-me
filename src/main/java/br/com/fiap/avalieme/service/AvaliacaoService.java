@@ -6,6 +6,8 @@ import br.com.fiap.avalieme.dto.AvaliacaoRequest;
 import br.com.fiap.avalieme.repository.AvaliacaoRepository;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class AvaliacaoService {
@@ -19,10 +21,15 @@ public class AvaliacaoService {
     }
 
     public Avaliacao registrar(AvaliacaoRequest request) {
-        if (request.nota() == null) throw new IllegalArgumentException("nota e obrigatoria");
-        if (request.nota() < 0 || request.nota() > 10) throw new IllegalArgumentException("nota deve estar entre 0 e 10");
-        if (request.descricao() == null || request.descricao().isBlank()) throw new IllegalArgumentException("descricao e obrigatoria");
-        if (request.descricao().trim().length() < TAMANHO_MINIMO_DESCRICAO) throw new IllegalArgumentException("descricao muito curta para ser uma avaliacao");
+        List<String> erros = new ArrayList<>();
+
+        if (request.nota() == null) erros.add("nota e obrigatoria");
+        else if (request.nota() < 0 || request.nota() > 10) erros.add("nota deve estar entre 0 e 10");
+
+        if (request.descricao() == null || request.descricao().isBlank()) erros.add("descricao e obrigatoria");
+        else if (request.descricao().trim().length() < TAMANHO_MINIMO_DESCRICAO) erros.add("descricao muito curta para ser uma avaliacao");
+
+        if (!erros.isEmpty()) throw new ValidacaoException(erros);
 
         Avaliacao avaliacao = new Avaliacao(
             UUID.randomUUID().toString(),

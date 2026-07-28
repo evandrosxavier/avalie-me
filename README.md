@@ -202,6 +202,19 @@ Recebe o feedback do aluno, valida em duas camadas (entrada estrutural + regra d
 | `400 Bad Request` | payload estruturalmente inválido (JSON malformado, campo ausente/tipo errado) ou violação de regra de negócio (nota fora de 0–10, descrição curta) |
 | `500 Internal Server Error` | falha inesperada (ex.: indisponibilidade do Cosmos DB) — capturada por catch-all, nunca vaza sem tratamento |
 
+Quando há mais de um problema de validação, todos são reportados de uma vez: o `detail` traz o resumo e o campo `errors` lista cada erro individualmente (o campo é omitido quando não há lista, ex.: corpo ausente ou JSON malformado).
+
+```json
+{
+  "type": "https://github.com/evandrosxavier/avalie-me/erros/validacao-entrada",
+  "title": "Erro de Validação",
+  "status": 400,
+  "detail": "Requisição inválida: nota é obrigatória; descricao é obrigatória",
+  "instance": "/avaliacao",
+  "errors": ["nota é obrigatória", "descricao é obrigatória"]
+}
+```
+
 Especificação completa: [`docs/openapi.yaml`](docs/openapi.yaml).
 
 ---
