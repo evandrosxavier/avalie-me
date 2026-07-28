@@ -85,6 +85,58 @@ Plataforma serverless de feedback de cursos, desenvolvida como Tech Challenge da
                     └──────────────────────────────┘
 ```
 
+### Visão alternativa — padrão de mercado (Event-Driven Architecture em camadas)
+
+O diagrama acima descreve o sistema em termos de fluxo. Esta segunda versão desenha a arquitetura como o mercado costuma representá-la — em **camadas horizontais** (Edge → Mensageria → Processamento → Dados), o formato usado em referências como o Azure Architecture Center para os padrões **Queue-Based Load Leveling**, **Competing Consumers** e **CQRS** que este projeto já aplica:
+
+```mermaid
+flowchart TB
+    subgraph EDGE["Camada de borda — API"]
+        direction LR
+        CLIENTE([Cliente HTTP]) --> INGEST["ingest\n(produtor do evento)"]
+    end
+
+    subgraph MSG["Camada de mensageria — desacoplamento"]
+        direction LR
+        QUEUE[["Fila de eventos\n(hoje: Storage Queue\nevolução: Service Bus / Event Grid)"]]
+    end
+
+    subgraph PROC["Camada de processamento — consumidores"]
+        direction LR
+        NOTIFY["notify\n(consumidor assíncrono)"]
+        REPORT["report\n(job agendado — leitura em lote)"]
+    end
+
+    subgraph DADOS["Camada de dados — write model + read model"]
+        direction LR
+        COSMOS_AVAL[("Cosmos DB\navaliacoes — write model")]
+        COSMOS_NOTIF[("Cosmos DB\nnotificacoes — auditoria")]
+        BLOB[("Blob Storage\nrelatorio HTML — read model")]
+    end
+
+    INGEST -->|grava| COSMOS_AVAL
+    INGEST -->|publica evento| QUEUE
+    QUEUE --> NOTIFY
+    NOTIFY -->|envia e-mail via ACS| ACS(["ACS"])
+    NOTIFY -->|grava| COSMOS_NOTIF
+
+    REPORT -->|lê semana anterior| COSMOS_AVAL
+    REPORT -->|publica| BLOB
+    REPORT -->|envia link via ACS| ACS
+
+    subgraph CROSS["Camadas transversais"]
+        direction LR
+        APPI["Observabilidade\n(App Insights)"]
+        KV["Segredos e identidade\n(Key Vault + Managed Identity)"]
+        GHA["CI/CD\n(GitHub Actions)"]
+    end
+
+    CROSS -.-> EDGE
+    CROSS -.-> PROC
+```
+
+**Por que esse é considerado "padrão de mercado":** o `ingest` nunca chama o `notify` diretamente — ele publica um evento e segue (**Queue-Based Load Leveling**), o `notify` drena a fila de forma assíncrona e resiliente (**Competing Consumers**, com retry nativo e poison queue), e o `report` mantém um modelo de leitura (HTML agregado) separado do modelo de escrita (**CQRS** leve). A única diferença real para uma arquitetura enterprise de referência seria trocar a Storage Queue por **Service Bus** ou **Event Grid** quando surgir a necessidade de múltiplos assinantes para o mesmo evento (hoje há um único consumidor, então a fila simples é suficiente).
+
 ---
 
 ## Modelo de nuvem
